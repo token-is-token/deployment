@@ -1,0 +1,47 @@
+---
+- name: Common role for all nodes
+  hosts: all
+  become: yes
+  
+  tasks:
+    - name: Set hostname
+      hostname:
+        name: "{{ inventory_hostname }}"
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+
+    - name: Install common packages
+      apt:
+        name:
+          - curl
+          - wget
+          - vim
+          - git
+          - htop
+          - net-tools
+          - rsync
+        state: present
+
+    - name: Set timezone
+      timezone:
+        name: Asia/Shanghai
+
+    - name: Configure system limits
+      pam_limits:
+        domain: '*'
+        limit_type: '-'
+        limit_item: nofile
+        value: '65536'
+
+    - name: Disable unnecessary services
+      service:
+        name: "{{ item }}"
+        state: stopped
+        enabled: no
+      loop:
+        - postfix
+        - cups

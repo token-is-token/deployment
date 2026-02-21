@@ -1,0 +1,72 @@
+---
+- name: Kubernetes node setup
+  hosts: kubernetes_nodes
+  become: yes
+  vars:
+    kubernetes_version: "1.28"
+    
+  tasks:
+    - name: Disable swap
+      command: swapoff -a
+      failed_when: false
+
+    - name: Remove swap from fstab
+      lineinfile:
+        path: /etc/fstab
+        regexp: '^.*swap.*$'
+        state: absent
+
+    - name: Load br_netfilter module
+      modprobe:
+        name: br_netfilter
+        state: present
+
+    - name: Configure sysctl for Kubernetes
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop:
+        - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+        - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+        - { name: 'net.ipv4.ip_forward', value: '1' }
+
+    - name: Add Kubernetes GPG key
+      apt_key:
+        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        state: present
+
+    - name: Add Kubernetes repository
+      apt_repository:
+        repo: "deb https://apt.kubernetes.io/ kubernetes-xenial main"
+        state: present
+
+    - name: Install kubeadm
+      apt:
+        name: kubeadm={{ kubernetes_version }}*
+        state: present
+        allow_downgrade: yes
+
+    - name: Install kubectl
+      apt:
+        name: kubectl={{ kubernetes_version }}*
+        state: present
+        allow_downgrade: yes
+
+    - name: Install kubelet
+      apt:
+        name: kubelet={{ kubernetes_version }}*
+        state: present
+        allow_downgrade: yes
+
+    - name: Hold Kubernetes packages
+      shell: |
+        apt-mark hold kubelet kubeadm kubectl
+      changed_when: false
+
+    - name: Enable kubelet service
+      service:
+        name: kubelet
+        state: started
+        enabled: yes

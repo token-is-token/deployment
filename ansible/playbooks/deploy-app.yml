@@ -1,0 +1,66 @@
+---
+- name: Deploy Application to Kubernetes
+  hosts: localhost
+  connection: local
+  vars:
+    namespace: default
+    manifest_path: "../kubernetes"
+    
+  tasks:
+    - name: Check if kubectl is available
+      command: kubectl version --client
+      register: kubectl_version
+      changed_when: false
+      failed_when: false
+
+    - name: Verify cluster connectivity
+      command: kubectl cluster-info
+      register: cluster_info
+      changed_when: false
+      failed_when: false
+
+    - name: Create namespace if not exists
+      command: kubectl create namespace {{ namespace }}
+      register: namespace_result
+      failed_when: false
+      changed_when: "'Created' in namespace_result.stdout or 'AlreadyExists' in namespace_result.stderr"
+
+    - name: Apply ConfigMaps
+      command: kubectl apply -f {{ manifest_path }}/base/ -n {{ namespace }}
+      register: configmap_result
+      changed_when: "'configured' in configmap_result.stdout"
+
+    - name: Apply Secrets
+      command: kubectl apply -f {{ manifest_path }}/base/ -n {{ namespace }}
+      register: secrets_result
+      changed_when: "'configured' in secrets_result.stdout"
+
+    - name: Apply Deployments
+      command: kubectl apply -f {{ manifest_path }}/base/ -n {{ namespace }}
+      register: deployment_result
+      changed_when: "'configured' in deployment_result.stdout"
+
+    - name: Apply Services
+      command: kubectl apply -f {{ manifest_path }}/base/ -n {{ namespace }}
+      register: service_result
+      changed_when: "'configured' in service_result.stdout"
+
+    - name: Apply Ingress
+      command: kubectl apply -f {{ manifest_path }}/base/ -n {{ namespace }}
+      register: ingress_result
+      changed_when: "'configured' in ingress_result.stdout"
+
+    - name: Wait for deployments to be ready
+      command: kubectl rollout status deployment/{{ item }} -n {{ namespace }}
+      loop:
+        - api-gateway
+        - provider-node
+      register: rollout_status
+      until: rollout_status.rc == 0
+      retries: 30
+      delay: 10
+
+    - name: Display deployment status
+      command: kubectl get all -n {{ namespace }}
+      register: all_resources
+      changed_when: false
